@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../models/credential.dart';
 import '../../models/category.dart';
 import '../../repositories/credential_repository.dart';
+import 'add_edit_screen.dart';
+import 'detail_screen.dart';
+import '../theme/shared.dart';
+import '../theme/category_style.dart';
+import '../widgets/primary_button.dart';
 
 // This screen shows the list of saved credentials
-// Now uses the real CredentialRepository instead of mock data
 class VaultScreen extends StatefulWidget {
   // The repository this screen reads credentials from
   final CredentialRepository credentialRepository;
 
-  // The service that knows how to decrypt encryptedData back into
-  // a readable CredentialData object
   final encryptionService;
 
   // The AES key used for decryption, already derived at login
@@ -29,11 +32,16 @@ class VaultScreen extends StatefulWidget {
 
 class _VaultScreenState extends State<VaultScreen> {
   // Keeps track of which category chip is currently selected
-  // Null means "All" is selected (no filter applied)
   CredentialCategory? selectedCategory;
 
   // True while credentials are being loaded from the repository
   bool isLoading = true;
+
+  // Holds any error message if loading fails, shown on screen for debugging
+  String? loadError;
+
+  // Holds whatever text is currently typed into the search bar
+  String searchQuery = '';
 
   // The full list of credentials, already decrypted, ready to display
   List<Map<String, dynamic>> decryptedCredentials = [];
@@ -45,87 +53,71 @@ class _VaultScreenState extends State<VaultScreen> {
   }
 
   // Loads every credential from the repository, then decrypts each one
-  // so the title and username can be shown on screen
   Future<void> loadCredentials() async {
     setState(() {
       isLoading = true;
+      loadError = null;
     });
 
-    List<Credential> credentials = await widget.credentialRepository
-        .getAllCredentials();
+    try {
+      List<Credential> credentials = await widget.credentialRepository
+          .getAllCredentials();
 
-    List<Map<String, dynamic>> results = [];
+      List<Map<String, dynamic>> results = [];
 
-    for (var credential in credentials) {
-      String decryptedJsonString = await widget.encryptionService.decrypt(
-        credential.encryptedData,
-        widget.aesKey,
-      );
+      for (var credential in credentials) {
+        String decryptedJsonString = await widget.encryptionService.decrypt(
+          credential.encryptedData,
+          widget.aesKey,
+        );
 
-      CredentialData data = CredentialData.fromJsonString(decryptedJsonString);
+        CredentialData data = CredentialData.fromJsonString(
+          decryptedJsonString,
+        );
 
-      results.add({
-        'credential': credential,
-        'title': data.title,
-        'username': data.username,
+        results.add({
+          'credential': credential,
+          'title': data.title,
+          'username': data.username,
+        });
+      }
+
+      setState(() {
+        decryptedCredentials = results;
+        isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        loadError = e.toString();
+        isLoading = false;
       });
     }
-
-    setState(() {
-      decryptedCredentials = results;
-      isLoading = false;
-    });
   }
 
-  // This function returns only the credentials that match the currently selected category
-  // If selectedCategory is null, every credential is returned (the "All" case)
+  // This function returns only the credentials that match both the
+  // selected category and the search text typed in the search bar
   List<Map<String, dynamic>> getFilteredCredentials() {
-    if (selectedCategory == null) {
-      return decryptedCredentials;
-    }
-
     List<Map<String, dynamic>> filtered = [];
+
     for (var entry in decryptedCredentials) {
       Credential credential = entry['credential'];
-      if (credential.category == selectedCategory) {
+      String title = entry['title'];
+      String username = entry['username'];
+
+      bool matchesCategory =
+          selectedCategory == null || credential.category == selectedCategory;
+
+      bool matchesSearch =
+          searchQuery.isEmpty ||
+          title.toLowerCase().contains(searchQuery.toLowerCase()) ||
+          username.toLowerCase().contains(searchQuery.toLowerCase());
+
+      if (matchesCategory && matchesSearch) {
         filtered.add(entry);
       }
     }
+
     return filtered;
-  }
-
-  // Returns the icon that should be shown for a given category
-  IconData getCategoryIcon(CredentialCategory category) {
-    if (category == CredentialCategory.social) {
-      return Icons.chat_bubble;
-    }
-    if (category == CredentialCategory.work) {
-      return Icons.work;
-    }
-    if (category == CredentialCategory.finance) {
-      return Icons.credit_card;
-    }
-    if (category == CredentialCategory.shopping) {
-      return Icons.shopping_cart;
-    }
-    return Icons.folder;
-  }
-
-  // Returns the icon square background color for a given category
-  Color getCategoryColor(CredentialCategory category) {
-    if (category == CredentialCategory.social) {
-      return const Color(0xFFB39DDB);
-    }
-    if (category == CredentialCategory.work) {
-      return const Color(0xFF8B5A5A);
-    }
-    if (category == CredentialCategory.finance) {
-      return const Color(0xFF4A90D9);
-    }
-    if (category == CredentialCategory.shopping) {
-      return const Color(0xFFE8951C);
-    }
-    return const Color(0xFF616161);
   }
 
   // Turns "work" into "Work" for display on the category chips
@@ -135,12 +127,68 @@ class _VaultScreenState extends State<VaultScreen> {
     return firstLetter + restOfText;
   }
 
+  // Opens the Add/Edit screen in Add mode, then reloads the list on return
+  Future<void> openAddScreen() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AddEditScreen(
+          credentialRepository: widget.credentialRepository,
+          encryptionService: widget.encryptionService,
+          aesKey: widget.aesKey,
+        ),
+      ),
+    );
+
+    loadCredentials();
+  }
+
+  // Opens the Detail screen for one credential, then reloads the list on return
+  Future<void> openDetailScreen(Credential credential) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => DetailScreen(
+          credential: credential,
+          credentialRepository: widget.credentialRepository,
+          encryptionService: widget.encryptionService,
+          aesKey: widget.aesKey,
+        ),
+      ),
+    );
+
+    loadCredentials();
+  }
+
+  // Decrypts just the password for one credential, then copies it
+  // Password is not kept decrypted in decryptedCredentials, so it gets
+  // decrypted again here, only for the moment it is copied
+  Future<void> copyPassword(Credential credential) async {
+    String decryptedJsonString = await widget.encryptionService.decrypt(
+      credential.encryptedData,
+      widget.aesKey,
+    );
+
+    CredentialData data = CredentialData.fromJsonString(decryptedJsonString);
+
+    await Clipboard.setData(ClipboardData(text: data.password));
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Copied to clipboard.')));
+  }
+
   @override
   Widget build(BuildContext context) {
     List<Map<String, dynamic>> credentialsToShow = getFilteredCredentials();
 
     return Scaffold(
-      backgroundColor: const Color(0xFF121212),
+      backgroundColor: Shared.background,
+      floatingActionButton: FloatingActionButton(
+        onPressed: openAddScreen,
+        backgroundColor: Shared.gold,
+        child: const Icon(Icons.add, color: Colors.black),
+      ),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(20),
@@ -154,7 +202,7 @@ class _VaultScreenState extends State<VaultScreen> {
                   const Text(
                     'My Vault',
                     style: TextStyle(
-                      color: Color(0xFFF5F5F5),
+                      color: Shared.textPrimary,
                       fontSize: 28,
                       fontWeight: FontWeight.bold,
                     ),
@@ -165,7 +213,7 @@ class _VaultScreenState extends State<VaultScreen> {
                     },
                     icon: const Icon(
                       Icons.settings,
-                      color: Color(0xFFD4AF37),
+                      color: Shared.gold,
                       size: 28,
                     ),
                   ),
@@ -178,20 +226,25 @@ class _VaultScreenState extends State<VaultScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1E1E1E),
+                  color: Shared.surface,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFF2C2C2C)),
+                  border: Border.all(color: Shared.border),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.search, color: Color(0xFF9E9E9E)),
+                    const Icon(Icons.search, color: Shared.textSecondary),
                     const SizedBox(width: 8),
                     Expanded(
                       child: TextField(
-                        style: const TextStyle(color: Color(0xFFF5F5F5)),
+                        onChanged: (value) {
+                          setState(() {
+                            searchQuery = value;
+                          });
+                        },
+                        style: const TextStyle(color: Shared.textPrimary),
                         decoration: const InputDecoration(
                           hintText: 'Search credentials',
-                          hintStyle: TextStyle(color: Color(0xFF9E9E9E)),
+                          hintStyle: TextStyle(color: Shared.textSecondary),
                           border: InputBorder.none,
                         ),
                       ),
@@ -222,21 +275,40 @@ class _VaultScreenState extends State<VaultScreen> {
     );
   }
 
-  // Decides what to show below the chips: a loading spinner while
-  // credentials are being fetched, an empty state message if there are
-  // no credentials to show, or the actual list of credential cards
+  // Decides what to show below the chips
   Widget buildMainContent(List<Map<String, dynamic>> credentialsToShow) {
     if (isLoading == true) {
-      return const Center(
-        child: CircularProgressIndicator(color: Color(0xFFD4AF37)),
+      return const Center(child: CircularProgressIndicator(color: Shared.gold));
+    }
+
+    if (loadError != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(
+            'Failed to load vault\n$loadError',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Shared.error),
+          ),
+        ),
       );
     }
 
     if (credentialsToShow.isEmpty) {
-      return const Center(
-        child: Text(
-          'Your vault is empty',
-          style: TextStyle(color: Color(0xFF9E9E9E), fontSize: 16),
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Your vault is empty',
+              style: TextStyle(color: Shared.textSecondary, fontSize: 16),
+            ),
+            const SizedBox(height: 16),
+            PrimaryButton(
+              label: 'Add your first credential',
+              onPressed: openAddScreen,
+            ),
+          ],
         ),
       );
     }
@@ -245,8 +317,6 @@ class _VaultScreenState extends State<VaultScreen> {
   }
 
   // Builds the list of category chip widgets
-  // The first chip is always "All". The rest come from every value in
-  // the CredentialCategory enum
   List<Widget> buildCategoryChips() {
     List<Widget> chips = [];
 
@@ -261,7 +331,6 @@ class _VaultScreenState extends State<VaultScreen> {
     return chips;
   }
 
-  // Builds a single chip widget. If category is null, this is the
   // "All" chip, which clears the filter when tapped
   Widget buildOneChip({
     required String label,
@@ -280,18 +349,14 @@ class _VaultScreenState extends State<VaultScreen> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
           decoration: BoxDecoration(
-            color: isSelected ? const Color(0xFFD4AF37) : Colors.transparent,
+            color: isSelected ? Shared.gold : Colors.transparent,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: isSelected
-                  ? const Color(0xFFD4AF37)
-                  : const Color(0xFF2C2C2C),
-            ),
+            border: Border.all(color: isSelected ? Shared.gold : Shared.border),
           ),
           child: Text(
             label,
             style: TextStyle(
-              color: isSelected ? Colors.black : const Color(0xFFF5F5F5),
+              color: isSelected ? Colors.black : Shared.textPrimary,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -309,66 +374,74 @@ class _VaultScreenState extends State<VaultScreen> {
       String title = entry['title'];
       String username = entry['username'];
 
-      Widget card = Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1E1E1E),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFF2C2C2C)),
-        ),
-        child: Row(
-          children: [
-            // Icon square
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: getCategoryColor(credential.category),
-                borderRadius: BorderRadius.circular(10),
+      Widget card = GestureDetector(
+        onTap: () {
+          openDetailScreen(credential);
+        },
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Shared.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Shared.border),
+          ),
+          child: Row(
+            children: [
+              // Icon square
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: getCategoryColor(credential.category),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  getCategoryIcon(credential.category),
+                  color: Colors.white,
+                  size: 22,
+                ),
               ),
-              child: Icon(
-                getCategoryIcon(credential.category),
-                color: Colors.white,
-                size: 22,
-              ),
-            ),
 
-            const SizedBox(width: 14),
+              const SizedBox(width: 14),
 
-            // Title + username
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      color: Color(0xFFF5F5F5),
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
+              // Title + username
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: Shared.textPrimary,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    username,
-                    style: const TextStyle(
-                      color: Color(0xFF9E9E9E),
-                      fontSize: 14,
+                    const SizedBox(height: 2),
+                    Text(
+                      username,
+                      style: const TextStyle(
+                        color: Shared.textSecondary,
+                        fontSize: 14,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
 
-            // Copy icon button
-            IconButton(
-              onPressed: () {
-                // Will copy the password to the clipboard later (30 second auto-clear)
-              },
-              icon: const Icon(Icons.copy_outlined, color: Color(0xFF9E9E9E)),
-            ),
-          ],
+              // Copy icon button, copies the password without opening detail
+              IconButton(
+                onPressed: () {
+                  copyPassword(credential);
+                },
+                icon: const Icon(
+                  Icons.copy_outlined,
+                  color: Shared.textSecondary,
+                ),
+              ),
+            ],
+          ),
         ),
       );
 
