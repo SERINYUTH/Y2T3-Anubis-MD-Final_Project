@@ -5,7 +5,7 @@ import '../widgets/primary_button.dart';
 import 'register_screen.dart';
 
 // First screen shown, this is just a shell for now
-// Buttons lead through to the vault, no real auth logic yet
+// no real auth logic yet
 class WelcomeScreen extends StatelessWidget {
   final CredentialRepository credentialRepository;
   final encryptionService;

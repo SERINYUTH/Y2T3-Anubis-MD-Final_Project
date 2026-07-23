@@ -161,8 +161,7 @@ class _VaultScreenState extends State<VaultScreen> {
   }
 
   // Decrypts just the password for one credential, then copies it
-  // Password is not kept decrypted in decryptedCredentials, so it gets
-  // decrypted again here, only for the moment it is copied
+  // Password is not kept decrypted in decryptedCredentials, so it gets decrypted again here, only for the moment it is copied
   Future<void> copyPassword(Credential credential) async {
     String decryptedJsonString = await widget.encryptionService.decrypt(
       credential.encryptedData,

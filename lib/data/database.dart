@@ -2,7 +2,6 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
 // This file handles the local SQLite database
-// Only one database instance is kept and reused
 class AppDatabase {
   static Database? _db;
 
@@ -24,8 +23,7 @@ class AppDatabase {
           CREATE TABLE credentials (
             id TEXT PRIMARY KEY,
             encryptedData TEXT,
-            category TEXT,
-            updatedAt TEXT
+            category TEXT
           )
           '''
         );

@@ -85,27 +85,6 @@ class _DetailScreenState extends State<DetailScreen> {
     }
   }
 
-  // Turns July 12 2026 into a simple date string, no third party package needed
-  String formatDate(DateTime date) {
-    List<String> months = [
-      'January',
-      'February',
-      'March',
-      'April',
-      'May',
-      'June',
-      'July',
-      'August',
-      'September',
-      'October',
-      'November',
-      'December',
-    ];
-
-    String month = months[date.month - 1];
-    return '$month ${date.day}, ${date.year}';
-  }
-
   @override
   Widget build(BuildContext context) {
     if (isLoading == true) {
@@ -202,16 +181,6 @@ class _DetailScreenState extends State<DetailScreen> {
                 onCopy: () {
                   copyToClipboard(credentialData.url);
                 },
-              ),
-
-              const SizedBox(height: 24),
-
-              Text(
-                'Last updated ${formatDate(widget.credential.updatedAt)}',
-                style: const TextStyle(
-                  color: Shared.textSecondary,
-                  fontSize: 12,
-                ),
               ),
             ],
           ),

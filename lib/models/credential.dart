@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'category.dart';
 
 // This class holds the actual sensitive information for one credential
-// This class is only ever kept in memory for a short time
 class CredentialData {
   String title;
   String username;
@@ -46,13 +45,11 @@ class Credential {
   String id;
   String encryptedData;           // AES encrypted version of a CredentialData
   CredentialCategory category;    // stored as plain text
-  DateTime updatedAt;
 
   Credential({
     required this.id,
     required this.encryptedData,
     required this.category,
-    required this.updatedAt,
   });
 
   // Convert this Credential into a Map, so it can be saved as one row in SQLite
@@ -61,7 +58,6 @@ class Credential {
     Map<String, dynamic> map = {
       'encryptedData': encryptedData,
       'category': category.name,
-      'updatedAt': updatedAt.toIso8601String(),
     };
     return map;
   }
@@ -75,7 +71,6 @@ class Credential {
       id: id,
       encryptedData: map['encryptedData'],
       category: CredentialCategory.values.byName(map['category']),
-      updatedAt: DateTime.parse(map['updatedAt']),
     );
     return result;
   }

@@ -125,7 +125,6 @@ class _AddEditScreenState extends State<AddEditScreen> {
       id: credentialId,
       encryptedData: encryptedData,
       category: selectedCategory,
-      updatedAt: DateTime.now(),
     );
 
     await widget.credentialRepository.saveCredential(credential);

@@ -1,5 +1,4 @@
 // Holds everything needed to unlock the vault on this device
-// vaultKey itself is never stored, only wrapped (encrypted) copies of it
 class User {
   String id;
 
