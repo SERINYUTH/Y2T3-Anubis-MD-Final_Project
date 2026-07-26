@@ -1,3 +1,4 @@
+import 'package:anubis/services/encryption_service.dart';
 import 'package:flutter/material.dart';
 import '../../models/credential.dart';
 import '../../models/category.dart';
@@ -13,7 +14,7 @@ import '../widgets/app_text_field.dart';
 
 class AddEditScreen extends StatefulWidget {
   final CredentialRepository credentialRepository;
-  final encryptionService;
+  final EncryptionService encryptionService;
   final String aesKey;
 
   // If this is null we are adding a new credential
@@ -125,6 +126,7 @@ class _AddEditScreenState extends State<AddEditScreen> {
       id: credentialId,
       encryptedData: encryptedData,
       category: selectedCategory,
+      updatedAt: DateTime.now(),
     );
 
     await widget.credentialRepository.saveCredential(credential);

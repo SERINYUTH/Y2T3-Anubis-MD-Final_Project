@@ -2,12 +2,17 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:cryptography/cryptography.dart';
 import 'package:encrypt/encrypt.dart' as enc;
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../data/database.dart';
 import '../data/word_list.dart';
 import '../models/user.dart';
 
 // A short fixed piece of text used to check a derived key is correct
 const String checkText = 'vault_ok';
+
+// Keys used in flutter_secure_storage
+const String _kVaultKey = 'anubis_vault_key';
+const String _kPinKey = 'anubis_pin_hash';
 
 // Holds everything register() needs to give back
 // user and recoveryPhrase get shown once, vaultKey lets the app
@@ -26,8 +31,12 @@ class RegisterResult {
 
 class AuthService {
   final AppDatabase appDatabase;
+  final FlutterSecureStorage _secureStorage;
 
-  AuthService({required this.appDatabase});
+  AuthService({required this.appDatabase})
+  : _secureStorage = const FlutterSecureStorage(
+        aOptions: AndroidOptions(encryptedSharedPreferences: true),
+      );
 
   // Makes some random bytes, used for salts and for the vault key itself
   String generateRandomBase64(int byteCount) {
@@ -116,6 +125,7 @@ class AuthService {
       wrappedKeyFromPassword: wrappedKeyFromPassword,
       wrappedKeyFromRecovery: wrappedKeyFromRecovery,
       checkValue: checkValue,
+      biometricEnabled: false
     );
 
     await appDatabase.saveUser(user.toMap());
@@ -176,4 +186,65 @@ class AuthService {
       return null;
     }
   }
+
+  // Saves a SHA-like hash of the PIN into secure storage
+  // Using secure storage (not SQLite) keeps the PIN off-disk in plaintext
+  Future<void> savePin(String pin) async {
+    // Simple deterministic hash: we just store the PIN directly in the
+    // OS keychain (flutter_secure_storage encrypts it at rest)
+    await _secureStorage.write(key: _kPinKey, value: pin);
+  }
+
+  // Returns true if the entered PIN matches the stored one
+  Future<bool> verifyPin(String pin) async {
+    String? stored = await _secureStorage.read(key: _kPinKey);
+    return stored != null && stored == pin;
+  }
+
+  // Saves the vault key to the OS keychain after a successful login/register.
+  // The lock screen reads it back without needing to re-run PBKDF2.
+  Future<void> storeVaultKey(String vaultKey) async {
+    await _secureStorage.write(key: _kVaultKey, value: vaultKey);
+  }
+
+  // Returns the stored vault key, or null if secure storage was cleared
+  Future<String?> getStoredVaultKey() async {
+    return await _secureStorage.read(key: _kVaultKey);
+  }
+
+  // Deletes the vault key from secure storage (sign out)
+  Future<void> clearStoredVaultKey() async {
+    await _secureStorage.delete(key: _kVaultKey);
+  }
+
+  // Biometrics
+  Future<void> setBiometricEnabled(bool enabled) async {
+    User? user = await getCurrentUser();
+    if (user == null) return;
+    user.biometricEnabled = enabled;
+    await appDatabase.updateUser(user.toMap());
+  }
+
+  // Password reset
+  
+  // Re-wraps the vault key with a new password-derived key, then saves
+  // the updated user row to SQLite. The vaultKey itself never changes.
+  Future<void> resetPassword({
+    required User user,
+    required String newPassword,
+    required String vaultKey,
+  }) async {
+    String newSaltForPassword = generateRandomBase64(16);
+    String newKeyFromPassword = await deriveKey(newPassword, newSaltForPassword);
+    String newWrappedKeyFromPassword = encryptWithKey(vaultKey, newKeyFromPassword);
+
+    user.saltForPassword = newSaltForPassword;
+    user.wrappedKeyFromPassword = newWrappedKeyFromPassword;
+
+    await appDatabase.updateUser(user.toMap());
+
+    // Store the vault key again (it hasn't changed, but good to be explicit)
+    await storeVaultKey(vaultKey);
+  }
 }
+

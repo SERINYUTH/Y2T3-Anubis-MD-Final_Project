@@ -1,26 +1,40 @@
 import 'package:flutter/material.dart';
+import '../../services/auth_service.dart';
+import '../../services/encryption_service.dart';
 import '../../repositories/credential_repository.dart';
 import '../theme/shared.dart';
 import '../widgets/primary_button.dart';
 import 'register_screen.dart';
+import 'login_screen.dart';
+import '../../models/user.dart';
 
-// First screen shown, this is just a shell for now
-// no real auth logic yet
+// First screen the user sees when no account exists yet
+// No back arrow here, this is the very first screen
 class WelcomeScreen extends StatelessWidget {
+  final AuthService authService;
   final CredentialRepository credentialRepository;
-  final encryptionService;
+  final EncryptionService encryptionService;
+
+  // Null when no account has been registered yet.
+  // Non-null means an account exists but the user signed out — Login is valid.
+  final User? existingUser;
 
   const WelcomeScreen({
     super.key,
+    required this.authService,
     required this.credentialRepository,
     required this.encryptionService,
+    this.existingUser
   });
 
-  void openRegisterScreen(BuildContext context) {
+  // Called when Log In is tapped, login screen is not built yet
+  void _openLoginScreen(BuildContext context) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => RegisterScreen(
+        builder: (_) => LoginScreen(
+          user: existingUser!,
+          authService: authService,
           credentialRepository: credentialRepository,
           encryptionService: encryptionService,
         ),
@@ -28,13 +42,24 @@ class WelcomeScreen extends StatelessWidget {
     );
   }
 
-  // Log In leads to the same shell flow for now, login is not built yet
-  void openLoginScreen(BuildContext context) {
-    openRegisterScreen(context);
+  void _openRegisterScreen(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => RegisterScreen(
+          authService: authService,
+          credentialRepository: credentialRepository,
+          encryptionService: encryptionService,
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    // If an account already exists but the user signed out, only show Log In
+    bool hasAccount = existingUser != null;
+
     return Scaffold(
       backgroundColor: Shared.background,
       body: SafeArea(
@@ -61,32 +86,36 @@ class WelcomeScreen extends StatelessWidget {
               ),
 
               const Spacer(flex: 5),
-
-              PrimaryButton(
-                label: 'Create Account',
-                onPressed: () {
-                  openRegisterScreen(context);
-                },
-              ),
-
-              const SizedBox(height: 12),
+          
+              if (!hasAccount) ...[
+                PrimaryButton(
+                  label: 'Create Account',
+                  onPressed: () {
+                    _openRegisterScreen(context);
+                  },
+                ),
+                const SizedBox(height: 12),
+              ],
 
               SizedBox(
                 width: double.infinity,
                 height: Shared.buttonHeight,
                 child: OutlinedButton(
-                  onPressed: () {
-                    openLoginScreen(context);
-                  },
+                  onPressed: hasAccount 
+                    ? () => _openLoginScreen(context)
+                    : null,
                   style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: Shared.gold),
+                    side: BorderSide(
+                      color: hasAccount ? Shared.gold : Shared.border),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(Shared.cardBorderRadius),
                     ),
                   ),
-                  child: const Text(
+                  child: Text(
                     'Log In',
-                    style: TextStyle(color: Shared.gold, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      color: hasAccount ? Shared.gold : Shared.textSecondary, 
+                      fontWeight: FontWeight.bold),
                   ),
                 ),
               ),

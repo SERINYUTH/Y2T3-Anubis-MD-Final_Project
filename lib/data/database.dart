@@ -2,6 +2,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
 // This file handles the local SQLite database
+// Only one database instance is kept and reused
 class AppDatabase {
   static Database? _db;
 
@@ -16,14 +17,15 @@ class AppDatabase {
 
     _db = await openDatabase(
       fullPath,
-      version: 1,
+      version: 2,
       onCreate: (db, version) async {
         await db.execute(
           '''
           CREATE TABLE credentials (
             id TEXT PRIMARY KEY,
             encryptedData TEXT,
-            category TEXT
+            category TEXT,
+            updatedAt TEXT
           )
           '''
         );
@@ -36,10 +38,20 @@ class AppDatabase {
             saltForRecovery TEXT,
             wrappedKeyFromPassword TEXT,
             wrappedKeyFromRecovery TEXT,
-            checkValue TEXT
+            checkValue TEXT,
+            biometricEnabled INTEGER DEFAULT 0
           )
           '''
         );
+      },
+
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          // Add biometricEnabled column to existing user table
+          await db.execute(
+            'ALTER TABLE user ADD COLUMN biometricEnabled INTEGER DEFAULT 0',
+          );
+        }
       },
     );
 
@@ -80,6 +92,17 @@ class AppDatabase {
       'user',
       row,
       conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  // Updates an existing user row in place
+  Future<void> updateUser(Map<String, dynamic> row) async {
+    Database db = await getDatabase();
+    await db.update(
+      'user',
+      row,
+      where: 'id = ?',
+      whereArgs: [row['id']]
     );
   }
 

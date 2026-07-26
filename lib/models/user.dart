@@ -1,4 +1,5 @@
 // Holds everything needed to unlock the vault on this device
+// vaultKey itself is never stored, only wrapped (encrypted) copies of it
 class User {
   String id;
 
@@ -15,6 +16,9 @@ class User {
   // Used to check a derived key is correct before trusting it
   String checkValue;
 
+  // Whether biometric unlock is enabled on this device
+  bool biometricEnabled;
+
   User({
     required this.id,
     required this.saltForPassword,
@@ -22,6 +26,7 @@ class User {
     required this.wrappedKeyFromPassword,
     required this.wrappedKeyFromRecovery,
     required this.checkValue,
+    this.biometricEnabled = false
   });
 
   // Turns this User into a Map so it can be saved as one row in SQLite
@@ -33,6 +38,7 @@ class User {
       'wrappedKeyFromPassword': wrappedKeyFromPassword,
       'wrappedKeyFromRecovery': wrappedKeyFromRecovery,
       'checkValue': checkValue,
+      'biometricEnabled': biometricEnabled ? 1 : 0
     };
   }
 
@@ -45,6 +51,7 @@ class User {
       wrappedKeyFromPassword: map['wrappedKeyFromPassword'],
       wrappedKeyFromRecovery: map['wrappedKeyFromRecovery'],
       checkValue: map['checkValue'],
+      biometricEnabled: (map['biometricEnabled'] ?? 0) == 1
     );
   }
 }

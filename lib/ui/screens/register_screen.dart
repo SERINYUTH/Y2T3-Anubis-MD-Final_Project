@@ -1,35 +1,81 @@
 import 'package:flutter/material.dart';
+import '../../services/auth_service.dart';
+import '../../services/encryption_service.dart';
 import '../../repositories/credential_repository.dart';
 import '../theme/shared.dart';
 import '../widgets/primary_button.dart';
+import '../widgets/app_text_field.dart';
 import 'recover_phrase_screen.dart';
 
-// This is just a shell for now, no real registration logic yet
-// Tapping Continue leads straight through to the Recovery Phrase shell
-class RegisterScreen extends StatelessWidget {
+// Lets the user set a master password and creates the account
+// No email field, since the app is fully offline there is nothing to verify it against
+class RegisterScreen extends StatefulWidget {
+  final AuthService authService;
   final CredentialRepository credentialRepository;
-  final encryptionService;
+  final EncryptionService encryptionService;
 
   const RegisterScreen({
     super.key,
+    required this.authService,
     required this.credentialRepository,
     required this.encryptionService,
   });
 
-  void openRecoverPhraseScreen(BuildContext context) {
-    // Placeholder key, register() is not called yet
-    String placeholderVaultKey = 'RQhaA/5ApSn3+jSTi3Hz2PyXv2/isJHcR6ppa+hkz5U=';
+  @override
+  State<RegisterScreen> createState() => _RegisterScreenState();
+}
 
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => RecoverPhraseScreen(
-          vaultKey: placeholderVaultKey,
-          credentialRepository: credentialRepository,
-          encryptionService: encryptionService,
+class _RegisterScreenState extends State<RegisterScreen> {
+  TextEditingController passwordController = TextEditingController();
+
+  bool passwordHidden = true;
+  bool isSaving = false;
+  String errorMessage = '';
+
+  // Called when Continue is tapped
+  Future<void> continuePressed() async {
+    String password = passwordController.text.trim();
+
+    if (password.isEmpty) {
+      setState(() {
+        errorMessage = 'Please enter a master password.';
+      });
+      return;
+    }
+
+    if (password.length < 8) {
+      setState(() {
+        errorMessage = 'Password must be at least 8 characters.';
+      });
+      return;
+    }
+
+    setState(() {
+      isSaving = true;
+      errorMessage = '';
+    });
+
+    RegisterResult result = await widget.authService.register(password: password);
+
+    if (mounted) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => RecoverPhraseScreen(
+            user: result.user,
+            recoveryPhrase: result.recoveryPhrase,
+            vaultKey: result.vaultKey,
+            authService: widget.authService,
+            credentialRepository: widget.credentialRepository,
+            encryptionService: widget.encryptionService
+          ),
         ),
-      ),
-    );
+      );
+    }
+
+    setState(() {
+      isSaving = false;
+    });
   }
 
   @override
@@ -60,21 +106,53 @@ class RegisterScreen extends StatelessWidget {
                 ),
               ),
 
+              const SizedBox(height: 24),
+
+              AppTextField(
+                label: 'Master Password',
+                controller: passwordController,
+                hintText: 'Enter a strong password',
+                obscureText: passwordHidden,
+                suffixIcon: IconButton(
+                  onPressed: () {
+                    setState(() {
+                      passwordHidden = !passwordHidden;
+                    });
+                  },
+                  icon: Icon(
+                    passwordHidden
+                        ? Icons.visibility_outlined
+                        : Icons.visibility_off_outlined,
+                    color: Shared.textSecondary,
+                  ),
+                ),
+              ),
+
               const SizedBox(height: 8),
 
               const Text(
-                'Register screen shell, no logic yet',
-                style: TextStyle(color: Shared.textSecondary, fontSize: 13),
+                "This is the only password you'll need to remember.",
+                style: TextStyle(color: Shared.textSecondary, fontSize: 12),
               ),
 
-              const Spacer(),
+              if (errorMessage.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(
+                  errorMessage,
+                  style: const TextStyle(color: Shared.error),
+                ),
+              ],
 
-              PrimaryButton(
-                label: 'Continue',
-                onPressed: () {
-                  openRecoverPhraseScreen(context);
-                },
-              ),
+              const SizedBox(height: 32),
+
+              isSaving
+                  ? const Center(
+                      child: CircularProgressIndicator(color: Shared.gold),
+                    )
+                  : PrimaryButton(
+                      label: 'Continue',
+                      onPressed: continuePressed,
+                    ),
             ],
           ),
         ),
