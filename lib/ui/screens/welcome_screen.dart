@@ -69,6 +69,13 @@ class WelcomeScreen extends StatelessWidget {
             children: [
               const Spacer(flex: 3),
 
+              Image.asset(
+                'assets/anubis_app.png',
+                width: 110,
+                height: 110,
+              ),
+              const SizedBox(height: 20),
+
               const Text(
                 'Anubis',
                 style: TextStyle(

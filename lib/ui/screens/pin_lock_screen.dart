@@ -4,7 +4,7 @@ import '../../services/auth_service.dart';
 import '../../repositories/credential_repository.dart';
 import '../../services/encryption_service.dart';
 import '../theme/shared.dart';
-import 'vault_screen.dart';
+import 'home_screen.dart';
 import 'login_screen.dart';
 import 'bio_lock_screen.dart';
 
@@ -37,8 +37,7 @@ class _PinLockScreenState extends State<PinLockScreen> {
 
   bool get _pinAvailable => widget.authService.pinAttemptsRemaining > 0;
   bool get _bioAvailable =>
-      widget.user.biometricEnabled &&
-      widget.authService.bioAttemptsRemaining > 0;
+      widget.user.biometricEnabled && widget.authService.bioAttemptsRemaining > 0;
 
   void _onDigitTapped(String digit) {
     if (!_pinAvailable) return;
@@ -132,7 +131,7 @@ class _PinLockScreenState extends State<PinLockScreen> {
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(
-        builder: (_) => VaultScreen(
+        builder: (_) => HomeScreen(
           credentialRepository: widget.credentialRepository,
           encryptionService: widget.encryptionService,
           aesKey: vaultKey,
@@ -184,6 +183,10 @@ class _PinLockScreenState extends State<PinLockScreen> {
             children: [
               const Spacer(flex: 2),
 
+              Image.asset('assets/anubis_app.png', width: 90, height: 90),
+
+              const SizedBox(height: 16),
+
               const Text(
                 'Anubis',
                 style: TextStyle(
@@ -196,9 +199,7 @@ class _PinLockScreenState extends State<PinLockScreen> {
               const SizedBox(height: 8),
 
               Text(
-                _pinAvailable
-                    ? 'Enter your PIN to unlock'
-                    : 'No PIN tries left',
+                _pinAvailable ? 'Enter your PIN to unlock' : 'No PIN tries left',
                 style: const TextStyle(
                   color: Shared.textSecondary,
                   fontSize: 14,

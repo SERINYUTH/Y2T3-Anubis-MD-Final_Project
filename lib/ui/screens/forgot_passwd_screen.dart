@@ -6,10 +6,10 @@ import '../../services/encryption_service.dart';
 import '../theme/shared.dart';
 import '../widgets/primary_button.dart';
 import '../widgets/app_text_field.dart';
-import 'vault_screen.dart';
+import 'home_screen.dart';
 
 // Two-step recovery screen.
-// Step 1: the user types their 12-word recovery phrase.
+// Step 1: the user types their recovery key.
 // Step 2: set a new master password.
 // On completion the wrappedKeyFromPassword is re-encrypted with the new
 // password-derived key, and the user is dropped into the vault.
@@ -32,28 +32,34 @@ class ForgotPasswordScreen extends StatefulWidget {
 }
 
 class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
-  // Which step is active: 0 = recovery phrase, 1 = new password
+  // Which step is active: 0 = recovery key, 1 = new password
   int _step = 0;
 
-  final _phraseController = TextEditingController();
+  final _recoveryKeyController = TextEditingController();
   final _newPasswordController = TextEditingController();
   final _confirmController = TextEditingController();
 
-  // Vault key recovered via the recovery phrase, used in step 2
+  // Vault key recovered via the recovery key, used in step 2
   String? _recoveredVaultKey;
 
-  bool _phraseHidden = false;
+  bool _recoveryKeyHidden = false;
   bool _newPasswordHidden = true;
   bool _confirmHidden = true;
   bool _isLoading = false;
   String _errorMessage = '';
 
-  Future<void> _verifyPhrase() async {
-    String phrase = _phraseController.text.trim();
+  @override
+  void initState() {
+    super.initState();
+    _newPasswordController.addListener(() => setState(() {}));
+  }
 
-    if (phrase.isEmpty) {
+  Future<void> _verifyRecoveryKey() async {
+    String recoveryKey = _recoveryKeyController.text.trim();
+
+    if (recoveryKey.isEmpty) {
       setState(() {
-        _errorMessage = 'Please enter your recovery phrase.';
+        _errorMessage = 'Please enter your recovery key.';
       });
       return;
     }
@@ -65,7 +71,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
     String? vaultKey = await widget.authService.unlockWithRecovery(
       widget.user,
-      phrase,
+      recoveryKey,
     );
 
     if (!mounted) return;
@@ -73,13 +79,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     if (vaultKey == null) {
       setState(() {
         _isLoading = false;
-        _errorMessage =
-            'Recovery phrase is incorrect. Check spelling and word order.';
+        _errorMessage = 'Recovery key is incorrect. Check for typos.';
       });
       return;
     }
 
-    // Phrase is correct — move to the new password step
+    // Key is correct — move to the new password step
     setState(() {
       _recoveredVaultKey = vaultKey;
       _isLoading = false;
@@ -128,7 +133,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(
-        builder: (_) => VaultScreen(
+        builder: (_) => HomeScreen(
           credentialRepository: widget.credentialRepository,
           encryptionService: widget.encryptionService,
           aesKey: _recoveredVaultKey!,
@@ -138,6 +143,33 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       ),
       (route) => false,
     );
+  }
+
+  int _strengthScore(String password) {
+    if (password.isEmpty) return 0;
+    int score = 0;
+    if (password.length >= 8) score++;
+    if (password.length >= 12) score++;
+    if (password.length >= 16) score++;
+    if (RegExp(r'[a-z]').hasMatch(password)) score++;
+    if (RegExp(r'[A-Z]').hasMatch(password)) score++;
+    if (RegExp(r'[0-9]').hasMatch(password)) score++;
+    if (RegExp(r'[!@#\$%^&*()\-_=+\[\]{}|;:,.<>?]').hasMatch(password)) score++;
+    return score.clamp(0, 7);
+  }
+
+  String _strengthLabel(int score) {
+    if (score <= 2) return 'Weak';
+    if (score <= 4) return 'Fair';
+    if (score <= 5) return 'Good';
+    return 'Strong';
+  }
+
+  Color _strengthColor(int score) {
+    if (score <= 2) return Shared.error;
+    if (score <= 4) return const Color(0xFFFF9800);
+    if (score <= 5) return const Color(0xFFFFEB3B);
+    return Shared.success;
   }
 
   @override
@@ -157,7 +189,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
               const SizedBox(height: 12),
 
-              if (_step == 0) _buildPhraseStep(),
+              if (_step == 0) _buildRecoveryKeyStep(),
               if (_step == 1) _buildNewPasswordStep(),
             ],
           ),
@@ -166,8 +198,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     );
   }
 
-  // Step 1 — enter recovery phrase
-  Widget _buildPhraseStep() {
+  // Step 1 — enter recovery key
+  Widget _buildRecoveryKeyStep() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -183,7 +215,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         const SizedBox(height: 12),
 
         const Text(
-          'Enter your 12-word recovery phrase exactly as you wrote it down.',
+          'Enter your recovery key exactly as it was shown to you.',
           style: TextStyle(
             color: Shared.textSecondary,
             fontSize: 14,
@@ -199,7 +231,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             const Padding(
               padding: EdgeInsets.only(bottom: 8),
               child: Text(
-                'Recovery Phrase',
+                'Recovery Key',
                 style: TextStyle(color: Shared.textSecondary, fontSize: 14),
               ),
             ),
@@ -210,23 +242,22 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 border: Border.all(color: Shared.border),
               ),
               child: TextField(
-                controller: _phraseController,
-                obscureText: _phraseHidden,
-                maxLines: _phraseHidden ? 1 : 4,
+                controller: _recoveryKeyController,
+                obscureText: _recoveryKeyHidden,
                 style: const TextStyle(color: Shared.textPrimary),
                 decoration: InputDecoration(
-                  hintText: 'word1 word2 word3 ...',
+                  hintText: 'XXXX-XXXX-XXXX-XXXX',
                   hintStyle: const TextStyle(color: Shared.textSecondary),
                   border: InputBorder.none,
                   contentPadding: const EdgeInsets.all(16),
                   suffixIcon: IconButton(
                     onPressed: () {
                       setState(() {
-                        _phraseHidden = !_phraseHidden;
+                        _recoveryKeyHidden = !_recoveryKeyHidden;
                       });
                     },
                     icon: Icon(
-                      _phraseHidden
+                      _recoveryKeyHidden
                           ? Icons.visibility_outlined
                           : Icons.visibility_off_outlined,
                       color: Shared.textSecondary,
@@ -250,7 +281,10 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
         _isLoading
             ? const Center(child: CircularProgressIndicator(color: Shared.gold))
-            : PrimaryButton(label: 'Verify Phrase', onPressed: _verifyPhrase),
+            : PrimaryButton(
+                label: 'Verify Recovery Key',
+                onPressed: _verifyRecoveryKey,
+              ),
       ],
     );
   }
@@ -301,6 +335,40 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             ),
           ),
         ),
+
+        if (_newPasswordController.text.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: _strengthScore(_newPasswordController.text) / 7,
+                    minHeight: 5,
+                    backgroundColor: Shared.border,
+                    valueColor: AlwaysStoppedAnimation(
+                      _strengthColor(
+                        _strengthScore(_newPasswordController.text),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                _strengthLabel(_strengthScore(_newPasswordController.text)),
+                style: TextStyle(
+                  color: _strengthColor(
+                    _strengthScore(_newPasswordController.text),
+                  ),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ],
 
         const SizedBox(height: 20),
 

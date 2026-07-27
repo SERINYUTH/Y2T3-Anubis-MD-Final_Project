@@ -9,7 +9,7 @@ class User {
 
   // The vault key encrypted with a key derived from the master password
   String wrappedKeyFromPassword;
-  // The vault key encrypted with a key derived from the recovery phrase
+  // The vault key encrypted with a key derived from the recovery key
   String wrappedKeyFromRecovery;
 
   // A known short text encrypted with the vault key

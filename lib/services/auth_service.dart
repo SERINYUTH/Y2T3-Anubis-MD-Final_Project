@@ -5,7 +5,6 @@ import 'package:cryptography/cryptography.dart';
 import 'package:encrypt/encrypt.dart' as enc;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../data/database.dart';
-import '../data/word_list.dart';
 import '../models/user.dart';
 
 // A short fixed piece of text used to check a derived key is correct
@@ -21,16 +20,16 @@ const String _kBootTimeKey = 'anubis_boot_time';
 const int quickAccessMaxAttempts = 3;
 
 // Holds everything register() needs to give back
-// user and recoveryPhrase get shown once, vaultKey lets the app
+// user and recoveryKey get shown once, vaultKey lets the app
 // go straight into the vault right after registering
 class RegisterResult {
   User user;
-  String recoveryPhrase;
+  String recoveryKey;
   String vaultKey;
 
   RegisterResult({
     required this.user,
-    required this.recoveryPhrase,
+    required this.recoveryKey,
     required this.vaultKey,
   });
 }
@@ -167,19 +166,33 @@ class AuthService {
     return encrypter.decrypt(encrypted, iv: iv);
   }
 
-  // Picks 12 random words from the word list, with no repeats
-  List<String> generateRecoveryPhraseWords() {
-    List<String> wordsCopy = List<String>.from(wordList);
-    wordsCopy.shuffle(Random.secure());
-    return wordsCopy.take(12).toList();
+  // Characters used to build the recovery key.
+  // Uppercase letters and digits only, no dashes (dashes are added for
+  // display). Kept simple: every character is equally likely.
+  static const String _recoveryKeyChars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+
+  // Makes a random recovery key in the form XXXX-XXXX-XXXX-XXXX
+  // (16 random characters, grouped into 4 blocks of 4 with dashes)
+  String generateRecoveryKey() {
+    Random random = Random.secure();
+    StringBuffer buffer = StringBuffer();
+
+    for (int i = 0; i < 16; i++) {
+      if (i != 0 && i % 4 == 0) {
+        buffer.write('-');
+      }
+      int charIndex = random.nextInt(_recoveryKeyChars.length);
+      buffer.write(_recoveryKeyChars[charIndex]);
+    }
+
+    return buffer.toString();
   }
 
   // Creates a brand new user, called once during registration
   // Makes one vault key, then wraps it with both the password and a
-  // freshly generated recovery phrase
+  // freshly generated recovery key
   Future<RegisterResult> register({required String password}) async {
-    List<String> recoveryWords = generateRecoveryPhraseWords();
-    String recoveryPhrase = recoveryWords.join(' ');
+    String recoveryKey = generateRecoveryKey();
 
     String vaultKey = generateRandomBase64(32);
 
@@ -187,7 +200,10 @@ class AuthService {
     String saltForRecovery = generateRandomBase64(16);
 
     String keyFromPassword = await deriveKey(password, saltForPassword);
-    String keyFromRecovery = await deriveKey(recoveryPhrase, saltForRecovery);
+    String keyFromRecovery = await deriveKey(
+      normalizeRecoveryKey(recoveryKey),
+      saltForRecovery,
+    );
 
     String wrappedKeyFromPassword = encryptWithKey(vaultKey, keyFromPassword);
     String wrappedKeyFromRecovery = encryptWithKey(vaultKey, keyFromRecovery);
@@ -209,7 +225,7 @@ class AuthService {
 
     return RegisterResult(
       user: user,
-      recoveryPhrase: recoveryPhrase,
+      recoveryKey: recoveryKey,
       vaultKey: vaultKey,
     );
   }
@@ -245,12 +261,12 @@ class AuthService {
     return vaultKey;
   }
 
-  // Tries to unlock the vault using the recovery phrase
-  // Returns the vault key if the recovery phrase was correct, otherwise null
-  Future<String?> unlockWithRecovery(User user, String recoveryPhrase) async {
-    String normalizedPhrase = normalizeRecoveryPhrase(recoveryPhrase);
+  // Tries to unlock the vault using the recovery key
+  // Returns the vault key if the recovery key was correct, otherwise null
+  Future<String?> unlockWithRecovery(User user, String recoveryKey) async {
+    String normalizedKey = normalizeRecoveryKey(recoveryKey);
     String keyFromRecovery = await deriveKey(
-      normalizedPhrase,
+      normalizedKey,
       user.saltForRecovery,
     );
     return unwrapAndCheck(
@@ -260,11 +276,11 @@ class AuthService {
     );
   }
 
-  // Trims extra spaces and makes everything lowercase
-  // Small typing differences should not break unlocking with the recovery phrase
-  String normalizeRecoveryPhrase(String phrase) {
-    List<String> words = phrase.trim().toLowerCase().split(RegExp(r'\s+'));
-    return words.join(' ');
+  // Strips dashes/spaces and makes everything uppercase
+  // Small typing differences (lowercase, missing dashes) should not break
+  // unlocking with the recovery key
+  String normalizeRecoveryKey(String key) {
+    return key.replaceAll(RegExp(r'[\s-]'), '').toUpperCase();
   }
 
   // Unwraps the vault key then checks it against the check value
@@ -361,7 +377,7 @@ class AuthService {
     // Store the vault key again (it hasn't changed, but good to be explicit)
     await storeVaultKey(vaultKey);
 
-    // Recovering via the phrase is just as strong as the master password —
+    // Recovering via the key is just as strong as the master password —
     // clear any Quick Access lockout and re-confirm this boot session.
     resetQuickAccessAttempts();
     await markUnlockedThisBoot();

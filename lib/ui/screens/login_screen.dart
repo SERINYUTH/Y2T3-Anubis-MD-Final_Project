@@ -6,8 +6,8 @@ import '../../services/encryption_service.dart';
 import '../theme/shared.dart';
 import '../widgets/primary_button.dart';
 import '../widgets/app_text_field.dart';
-import 'vault_screen.dart';
 import 'forgot_passwd_screen.dart';
+import 'home_screen.dart';
 
 // Login screen for users who already have an account on this device but
 // are coming in fresh (e.g. after app reinstall or clearing secure storage).
@@ -71,7 +71,7 @@ class _LoginScreenState extends State<LoginScreen> {
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(
-        builder: (_) => VaultScreen(
+        builder: (_) => HomeScreen(
           credentialRepository: widget.credentialRepository,
           encryptionService: widget.encryptionService,
           aesKey: vaultKey,
@@ -108,6 +108,13 @@ class _LoginScreenState extends State<LoginScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Spacer(flex: 2),
+
+              Image.asset(
+                'assets/anubis_app.png',
+                width: 90,
+                height: 90,
+              ),
+              const SizedBox(height: 20),
 
               const Text(
                 'Welcome back',

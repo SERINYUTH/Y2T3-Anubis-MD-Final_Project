@@ -5,7 +5,7 @@ import '../../services/auth_service.dart';
 import '../../repositories/credential_repository.dart';
 import '../../services/encryption_service.dart';
 import '../theme/shared.dart';
-import 'vault_screen.dart';
+import 'home_screen.dart';
 import 'login_screen.dart';
 import 'pin_lock_screen.dart';
 
@@ -122,7 +122,7 @@ class _BioLockScreenState extends State<BioLockScreen> {
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(
-        builder: (_) => VaultScreen(
+        builder: (_) => HomeScreen(
           credentialRepository: widget.credentialRepository,
           encryptionService: widget.encryptionService,
           aesKey: vaultKey,
@@ -174,6 +174,10 @@ class _BioLockScreenState extends State<BioLockScreen> {
             children: [
               const SizedBox(height: 24),
 
+              Image.asset('assets/anubis_app.png', width: 90, height: 90),
+
+              const SizedBox(height: 16),
+
               const Text(
                 'Anubis',
                 style: TextStyle(
@@ -200,7 +204,11 @@ class _BioLockScreenState extends State<BioLockScreen> {
               // no matter how tall the top or bottom blocks are.
               Expanded(
                 child: Center(
-                  child: Icon(Icons.fingerprint, color: Shared.gold, size: 96),
+                  child: Icon(
+                    Icons.fingerprint,
+                    color: Shared.gold,
+                    size: 96,
+                  ),
                 ),
               ),
 
@@ -209,7 +217,11 @@ class _BioLockScreenState extends State<BioLockScreen> {
               else if (_bioAvailable)
                 TextButton.icon(
                   onPressed: _tryBiometric,
-                  icon: const Icon(Icons.refresh, color: Shared.gold, size: 20),
+                  icon: const Icon(
+                    Icons.refresh,
+                    color: Shared.gold,
+                    size: 20,
+                  ),
                   label: const Text(
                     'Try Again',
                     style: TextStyle(color: Shared.gold, fontSize: 14),

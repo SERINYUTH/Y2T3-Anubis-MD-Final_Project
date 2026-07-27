@@ -7,9 +7,9 @@ import '../../services/encryption_service.dart';
 import '../theme/shared.dart';
 import '../widgets/primary_button.dart';
 import 'pin_setup_screen.dart';
-import 'vault_screen.dart';
+import 'home_screen.dart';
 
-// Shown once, right after registration (after the recovery phrase).
+// Shown once, right after registration (after the recovery key).
 class QuickAccessSetupScreen extends StatefulWidget {
   final User user;
   final String vaultKey;
@@ -137,7 +137,7 @@ class _QuickAccessSetupScreenState extends State<QuickAccessSetupScreen> {
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(
-        builder: (_) => VaultScreen(
+        builder: (_) => HomeScreen(
           credentialRepository: widget.credentialRepository,
           encryptionService: widget.encryptionService,
           aesKey: widget.vaultKey,
