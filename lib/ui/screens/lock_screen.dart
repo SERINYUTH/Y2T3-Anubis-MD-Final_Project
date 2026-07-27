@@ -5,8 +5,8 @@ import '../../services/auth_service.dart';
 import '../../repositories/credential_repository.dart';
 import '../../services/encryption_service.dart';
 import '../theme/shared.dart';
-import 'vault_screen.dart';
 import 'forgot_passwd_screen.dart';
+import 'home_screen.dart';
 
 // Lock screen shown when the app re-opens and a session already exists.
 // The vault key was previously derived and stored in OS secure storage via
@@ -139,7 +139,7 @@ class _LockScreenState extends State<LockScreen> {
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(
-        builder: (_) => VaultScreen(
+        builder: (_) => HomeScreen(
           credentialRepository: widget.credentialRepository,
           encryptionService: widget.encryptionService,
           aesKey: vaultKey,
@@ -175,6 +175,13 @@ class _LockScreenState extends State<LockScreen> {
           child: Column(
             children: [
               const Spacer(flex: 2),
+
+              Image.asset(
+                'assets/anubis_app.png',
+                width: 90,
+                height: 90,
+              ),
+              const SizedBox(height: 16),
 
               // Title
               const Text(

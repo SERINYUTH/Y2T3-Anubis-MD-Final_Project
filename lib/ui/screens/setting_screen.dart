@@ -267,25 +267,13 @@ class _SettingScreenState extends State<SettingScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Header
-              Row(
-                children: [
-                  IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(
-                      Icons.arrow_back,
-                      color: Shared.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  const Text(
-                    'Settings',
-                    style: TextStyle(
-                      color: Shared.textPrimary,
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
+              const Text(
+                'Settings',
+                style: TextStyle(
+                  color: Shared.textPrimary,
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
 
               const SizedBox(height: 24),
@@ -436,7 +424,7 @@ class _SettingScreenState extends State<SettingScreen> {
                     style: const TextStyle(
                       color: Shared.textSecondary,
                       fontSize: 12,
-                    ),
+                    ),  
                   ),
                 ],
               ),

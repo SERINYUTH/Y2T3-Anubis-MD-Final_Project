@@ -6,7 +6,7 @@ import '../../services/encryption_service.dart';
 import '../../services/auth_service.dart';
 import '../theme/shared.dart';
 import '../widgets/primary_button.dart';
-import 'vault_screen.dart';
+import 'home_screen.dart';
 
 // Shown after PIN setup during registration.
 // The user can enable biometric unlock here, or skip it.
@@ -96,7 +96,7 @@ class _BioScreenState extends State<BioScreen> {
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(
-        builder: (_) => VaultScreen(
+        builder: (_) => HomeScreen(
           credentialRepository: widget.credentialRepository,
           encryptionService: widget.encryptionService,
           aesKey: widget.vaultKey,

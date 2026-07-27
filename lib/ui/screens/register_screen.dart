@@ -32,6 +32,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool isSaving = false;
   String errorMessage = '';
 
+  @override
+  void initState() {
+    super.initState();
+    passwordController.addListener(() => setState(() {}));
+  }
+
   // Called when Continue is tapped
   Future<void> continuePressed() async {
     String password = passwordController.text.trim();
@@ -78,6 +84,33 @@ class _RegisterScreenState extends State<RegisterScreen> {
     });
   }
 
+  int _strengthScore(String password) {
+    if (password.isEmpty) return 0;
+    int score = 0;
+    if (password.length >= 8) score++;
+    if (password.length >= 12) score++;
+    if (password.length >= 16) score++;
+    if (RegExp(r'[a-z]').hasMatch(password)) score++;
+    if (RegExp(r'[A-Z]').hasMatch(password)) score++;
+    if (RegExp(r'[0-9]').hasMatch(password)) score++;
+    if (RegExp(r'[!@#\$%^&*()\-_=+\[\]{}|;:,.<>?]').hasMatch(password)) score++;
+    return score.clamp(0, 7);
+  }
+
+  String _strengthLabel(int score) {
+    if (score <= 2) return 'Weak';
+    if (score <= 4) return 'Fair';
+    if (score <= 5) return 'Good';
+    return 'Strong';
+  }
+
+  Color _strengthColor(int score) {
+    if (score <= 2) return Shared.error;
+    if (score <= 4) return const Color(0xFFFF9800);
+    if (score <= 5) return const Color(0xFFFFEB3B);
+    return Shared.success;
+  }
+  
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -127,6 +160,43 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                 ),
               ),
+
+              const SizedBox(height: 8),
+
+              // ADD before the hint text:
+              if (passwordController.text.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: _strengthScore(passwordController.text) / 7,
+                          minHeight: 5,
+                          backgroundColor: Shared.border,
+                          valueColor: AlwaysStoppedAnimation(
+                            _strengthColor(
+                              _strengthScore(passwordController.text),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      _strengthLabel(_strengthScore(passwordController.text)),
+                      style: TextStyle(
+                        color: _strengthColor(
+                          _strengthScore(passwordController.text),
+                        ),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
 
               const SizedBox(height: 8),
 

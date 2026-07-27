@@ -9,7 +9,8 @@
   import '../../services/auth_service.dart';
   import 'add_edit_screen.dart';
   import 'detail_screen.dart';
-  import 'setting_screen.dart';
+  // import 'setting_screen.dart';
+  // import 'password_generator_screen.dart';
   import '../theme/shared.dart';
   import '../theme/category_style.dart';
   import '../widgets/primary_button.dart';
@@ -167,27 +168,6 @@
       loadCredentials();
     }
 
-    void openSettings() {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => SettingScreen(
-            user: widget.user,
-            aesKey: widget.aesKey,
-            authService: widget.authService,
-            credentialRepository: widget.credentialRepository,
-            encryptionService: widget.encryptionService,
-            onSignOut: _handleSignOut,
-          ),
-        ),
-      );
-    }
-
-    // Pop all the way to root so main.dart re-checks for a user
-    void _handleSignOut() {
-      Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
-    }
-
     // Decrypts just the password for one credential, then copies it
     // Password is not kept decrypted in decryptedCredentials, so it gets
     // decrypted again here, only for the moment it is copied
@@ -222,27 +202,14 @@
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Top row: "My Vault" title + settings gear icon
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'My Vault',
-                      style: TextStyle(
-                        color: Shared.textPrimary,
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: () => openSettings(),
-                      icon: const Icon(
-                        Icons.settings,
-                        color: Shared.gold,
-                        size: 28,
-                      ),
-                    ),
-                  ],
+
+                const Text(
+                  'My Vault',
+                  style: TextStyle(
+                    color: Shared.textPrimary,
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
 
                 const SizedBox(height: 16),

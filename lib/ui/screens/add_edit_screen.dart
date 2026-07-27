@@ -45,10 +45,38 @@ class _AddEditScreenState extends State<AddEditScreen> {
   bool isSaving = false;
   bool isLoadingExistingData = true;
 
+  int _strengthScore(String password) {
+    if (password.isEmpty) return 0;
+    int score = 0;
+    if (password.length >= 8) score++;
+    if (password.length >= 12) score++;
+    if (password.length >= 16) score++;
+    if (RegExp(r'[a-z]').hasMatch(password)) score++;
+    if (RegExp(r'[A-Z]').hasMatch(password)) score++;
+    if (RegExp(r'[0-9]').hasMatch(password)) score++;
+    if (RegExp(r'[!@#\$%^&*()\-_=+\[\]{}|;:,.<>?]').hasMatch(password)) score++;
+    return score.clamp(0, 7);
+  }
+
+  String _strengthLabel(int score) {
+    if (score <= 2) return 'Weak';
+    if (score <= 4) return 'Fair';
+    if (score <= 5) return 'Good';
+    return 'Strong';
+  }
+
+  Color _strengthColor(int score) {
+    if (score <= 2) return Shared.error;
+    if (score <= 4) return const Color(0xFFFF9800);
+    if (score <= 5) return const Color(0xFFFFEB3B);
+    return Shared.success;
+  }
+
   @override
   void initState() {
     super.initState();
     loadExistingCredentialIfEditing();
+    passwordController.addListener(() => setState(() {}));
   }
 
   // If we are editing an existing credential this decrypts it and
@@ -161,6 +189,8 @@ class _AddEditScreenState extends State<AddEditScreen> {
 
   @override
   Widget build(BuildContext context) {
+    String password = passwordController.text;
+    int score = _strengthScore(password);
     bool isEditing = widget.existingCredential != null;
 
     if (isLoadingExistingData == true) {
@@ -250,6 +280,36 @@ class _AddEditScreenState extends State<AddEditScreen> {
                   ),
                 ),
 
+                if (password.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(
+                            value: score / 7,
+                            minHeight: 5,
+                            backgroundColor: Shared.border,
+                            valueColor: AlwaysStoppedAnimation(
+                              _strengthColor(score),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        _strengthLabel(score),
+                        style: TextStyle(
+                          color: _strengthColor(score),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                
                 const SizedBox(height: 20),
 
                 AppTextField(
