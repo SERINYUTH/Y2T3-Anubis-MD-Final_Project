@@ -1,20 +1,15 @@
 import 'package:flutter/material.dart';
 import '../../models/user.dart';
 import '../../services/auth_service.dart';
-import '../../repositories/credential_repository.dart';
-import '../../services/encryption_service.dart';
 import '../theme/shared.dart';
-import 'bio_screen.dart';
 
-// PIN setup screen, used both during registration and when changing the PIN.
-// When isChangingPin is true it simply saves the new PIN and pops back.
-// When isChangingPin is false (registration flow) it advances to BioScreen.
+// PIN setup screen, used during Quick Access setup (registration or from
+// Settings) and when changing an existing PIN. Always just saves the PIN
+// and pops back to whoever pushed it — the caller decides what's next.
 class PinSetupScreen extends StatefulWidget {
   final User user;
   final String vaultKey;
   final AuthService authService;
-  final CredentialRepository credentialRepository;
-  final EncryptionService encryptionService;
   final bool isChangingPin;
 
   const PinSetupScreen({
@@ -22,8 +17,6 @@ class PinSetupScreen extends StatefulWidget {
     required this.user,
     required this.vaultKey,
     required this.authService,
-    required this.credentialRepository,
-    required this.encryptionService,
     this.isChangingPin = false,
   });
 
@@ -90,29 +83,24 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
     // Also store the vault key in secure storage so lock screen can retrieve it
     await widget.authService.storeVaultKey(widget.vaultKey);
 
+    if (!widget.isChangingPin) {
+      // Setting up (not just changing) a PIN turns PIN Quick Access on
+      await widget.authService.setPinEnabled(true);
+      widget.user.pinEnabled = true;
+    }
+
     if (!mounted) return;
 
     if (widget.isChangingPin) {
-      Navigator.pop(context);
+      Navigator.pop(context, true);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('PIN updated successfully.')),
       );
       return;
     }
 
-    // Registration flow — advance to biometric setup
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => BioScreen(
-          user: widget.user,
-          vaultKey: widget.vaultKey,
-          authService: widget.authService,
-          credentialRepository: widget.credentialRepository,
-          encryptionService: widget.encryptionService,
-        ),
-      ),
-    );
+    // Quick Access setup flow — pop back with success, caller decides what's next
+    Navigator.pop(context, true);
   }
 
   @override

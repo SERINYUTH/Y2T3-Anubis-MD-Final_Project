@@ -10,6 +10,7 @@ import '../../services/encryption_service.dart';
 import '../../services/auth_service.dart';
 import '../theme/shared.dart';
 import 'pin_setup_screen.dart';
+import 'quick_access_screen.dart';
 
 // Settings screen: change PIN, export vault, import vault, sign out.
 class SettingScreen extends StatefulWidget {
@@ -208,12 +209,27 @@ class _SettingScreenState extends State<SettingScreen> {
           user: widget.user,
           vaultKey: widget.aesKey,
           authService: widget.authService,
-          credentialRepository: widget.credentialRepository,
-          encryptionService: widget.encryptionService,
           isChangingPin: true,
         ),
       ),
     );
+  }
+
+  // ── Quick Access ──────────────────────────────────────────────────────────
+  Future<void> _openQuickAccess() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => QuickAccessScreen(
+          user: widget.user,
+          vaultKey: widget.aesKey,
+          authService: widget.authService,
+        ),
+      ),
+    );
+    // widget.user.biometricEnabled may have changed on that screen —
+    // refresh so the subtitle below reflects the current state.
+    if (mounted) setState(() {});
   }
 
   // ── Sign out ──────────────────────────────────────────────────────────────
@@ -303,6 +319,21 @@ class _SettingScreenState extends State<SettingScreen> {
                         title: 'Change PIN',
                         subtitle: 'Update your 6-digit unlock PIN',
                         onTap: _openChangePinFlow,
+                      ),
+
+                      _settingTile(
+                        icon: Icons.fingerprint,
+                        title: 'Quick Access',
+                        subtitle: () {
+                          List<String> on = [
+                            if (widget.user.pinEnabled) 'PIN',
+                            if (widget.user.biometricEnabled) 'Biometric',
+                          ];
+                          return on.isEmpty
+                              ? 'Off — master password only'
+                              : 'On — ${on.join(' + ')}';
+                        }(),
+                        onTap: _openQuickAccess,
                       ),
 
                       // ── Backup & Restore ──────────────────────────────────

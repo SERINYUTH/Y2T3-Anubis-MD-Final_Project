@@ -47,7 +47,7 @@ class RootScreen extends StatefulWidget {
 class _RootScreenState extends State<RootScreen> {
   bool isLoading = true;
   User? existingUser;
-  bool hasVaultKeyInStorage = false;
+  bool canUseLockScreen = false;
 
   late AppDatabase appDatabase;
   late CredentialRepository credentialRepository;
@@ -68,15 +68,25 @@ class _RootScreenState extends State<RootScreen> {
 
   Future<void> checkForExistingUser() async {
     User? user = await authService.getCurrentUser();
-    String? storedKey;
+    bool hasVaultKeyInStorage = false;
+    bool restarted = true;
 
     if (user != null) {
-      storedKey = await authService.getStoredVaultKey();
+      hasVaultKeyInStorage = (await authService.getStoredVaultKey()) != null;
+      restarted = await authService.deviceRestartedSinceLastUnlock();
     }
 
     setState(() {
       existingUser = user;
-      hasVaultKeyInStorage = storedKey != null;
+      // Quick Access (PIN/biometric) only takes you straight to the lock
+      // screen if it's actually turned on, the vault key is cached, and
+      // the device hasn't been restarted since the last unlock — a fresh
+      // boot always asks for the master password once.
+      canUseLockScreen =
+          user != null &&
+          user.hasQuickAccess &&
+          hasVaultKeyInStorage &&
+          !restarted;
       isLoading = false;
     });
   }
@@ -86,8 +96,7 @@ class _RootScreenState extends State<RootScreen> {
     if (isLoading) {
       return const Scaffold(
         backgroundColor: Shared.background,
-        body: Center(
-          child: CircularProgressIndicator(color: Shared.gold)),
+        body: Center(child: CircularProgressIndicator(color: Shared.gold)),
       );
     }
 
@@ -96,12 +105,14 @@ class _RootScreenState extends State<RootScreen> {
         authService: authService,
         credentialRepository: credentialRepository,
         encryptionService: encryptionService,
-        existingUser: null
+        existingUser: null,
       );
     }
 
-    // Account exists and vault key is in secure storage → show lock screen
-    if (hasVaultKeyInStorage) {
+    // Account exists, Quick Access is on, and this boot session is already
+    // trusted → show the lock screen. Otherwise the master password
+    // (via WelcomeScreen → LoginScreen) is required.
+    if (canUseLockScreen) {
       return LockScreen(
         user: existingUser!,
         authService: authService,

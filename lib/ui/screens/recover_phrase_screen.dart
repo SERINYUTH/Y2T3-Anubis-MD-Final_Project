@@ -5,7 +5,7 @@ import '../../services/encryption_service.dart';
 import '../../services/auth_service.dart';
 import '../theme/shared.dart';
 import '../widgets/primary_button.dart';
-import 'pin_setup_screen.dart';
+import 'quick_access_setup_screen.dart';
 
 // Shows the 12 word recovery phrase once, right after registering
 // No back arrow here on purpose, the account is already created by
@@ -26,14 +26,13 @@ class RecoverPhraseScreen extends StatelessWidget {
     required this.authService,
     required this.credentialRepository,
     required this.encryptionService,
-
   });
 
-  void _openPinSetup(BuildContext context) {
+  void _openQuickAccessSetup(BuildContext context) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => PinSetupScreen(
+        builder: (_) => QuickAccessSetupScreen(
           user: user,
           vaultKey: vaultKey,
           authService: authService,
@@ -100,8 +99,7 @@ class RecoverPhraseScreen extends StatelessWidget {
 
               PrimaryButton(
                 label: "I've Saved It - Continue",
-                onPressed: () =>
-                  _openPinSetup(context)
+                onPressed: () => _openQuickAccessSetup(context),
               ),
             ],
           ),

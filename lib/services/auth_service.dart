@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 import 'package:cryptography/cryptography.dart';
 import 'package:encrypt/encrypt.dart' as enc;
@@ -13,6 +14,11 @@ const String checkText = 'vault_ok';
 // Keys used in flutter_secure_storage
 const String _kVaultKey = 'anubis_vault_key';
 const String _kPinKey = 'anubis_pin_hash';
+const String _kBootTimeKey = 'anubis_boot_time';
+
+// How many tries Quick Access gets before it locks and falls back to the
+// master password. PIN and biometric each get their own count.
+const int quickAccessMaxAttempts = 3;
 
 // Holds everything register() needs to give back
 // user and recoveryPhrase get shown once, vaultKey lets the app
@@ -33,10 +39,82 @@ class AuthService {
   final AppDatabase appDatabase;
   final FlutterSecureStorage _secureStorage;
 
+  // In-memory only — each is out of quickAccessMaxAttempts (3) tries.
+  // Reset to full whenever the master password is entered successfully.
+  // Living on this instance (not in storage) means a fresh app process
+  // also gets fresh attempts, same as a fresh boot would.
+  int pinAttemptsRemaining = quickAccessMaxAttempts;
+  int bioAttemptsRemaining = quickAccessMaxAttempts;
+
   AuthService({required this.appDatabase})
-  : _secureStorage = const FlutterSecureStorage(
+    : _secureStorage = const FlutterSecureStorage(
         aOptions: AndroidOptions(encryptedSharedPreferences: true),
       );
+
+  // Resets both Quick Access attempt counters back to full.
+  // Called after a successful master password unlock.
+  void resetQuickAccessAttempts() {
+    pinAttemptsRemaining = quickAccessMaxAttempts;
+    bioAttemptsRemaining = quickAccessMaxAttempts;
+  }
+
+  // Records one failed PIN attempt, returns tries left.
+  int recordFailedPinAttempt() {
+    if (pinAttemptsRemaining > 0) pinAttemptsRemaining--;
+    return pinAttemptsRemaining;
+  }
+
+  // Records one failed biometric attempt, returns tries left.
+  int recordFailedBiometricAttempt() {
+    if (bioAttemptsRemaining > 0) bioAttemptsRemaining--;
+    return bioAttemptsRemaining;
+  }
+
+  // ── Device-restart detection ─────────────────────────────────────────────
+  // Reads /proc/uptime (Android/Linux) to work out roughly when the device
+  // last booted. We store that value after every successful unlock; if it
+  // doesn't match anymore, the device has been restarted since then, so
+  // Quick Access is not trusted and the master password is required again.
+  // This is a simple, no-extra-dependency approximation rather than a
+  // proper native boot-receiver — good enough for this project's scope.
+  Future<int?> _currentBootEpochSeconds() async {
+    try {
+      String raw = await File('/proc/uptime').readAsString();
+      double uptimeSeconds = double.parse(raw.trim().split(' ').first);
+      int nowSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      return nowSeconds - uptimeSeconds.round();
+    } catch (_) {
+      // Not on Android/Linux (e.g. running on desktop) — can't tell, so
+      // don't force a master-password prompt over this check alone.
+      return null;
+    }
+  }
+
+  // True if this looks like a different boot than the last time we
+  // recorded an unlock. Also true (safest default) if we've never
+  // recorded one yet.
+  Future<bool> deviceRestartedSinceLastUnlock() async {
+    int? currentBoot = await _currentBootEpochSeconds();
+    if (currentBoot == null) return false;
+
+    String? storedBoot = await _secureStorage.read(key: _kBootTimeKey);
+    if (storedBoot == null) return true;
+
+    int storedBootSeconds = int.tryParse(storedBoot) ?? 0;
+    // A few seconds of drift is fine, anything more means a reboot happened.
+    return (currentBoot - storedBootSeconds).abs() > 10;
+  }
+
+  // Call after every successful unlock (master password, PIN, or
+  // biometric) so we know which boot session we're in next time.
+  Future<void> markUnlockedThisBoot() async {
+    int? currentBoot = await _currentBootEpochSeconds();
+    if (currentBoot == null) return;
+    await _secureStorage.write(
+      key: _kBootTimeKey,
+      value: currentBoot.toString(),
+    );
+  }
 
   // Makes some random bytes, used for salts and for the vault key itself
   String generateRandomBase64(int byteCount) {
@@ -99,9 +177,7 @@ class AuthService {
   // Creates a brand new user, called once during registration
   // Makes one vault key, then wraps it with both the password and a
   // freshly generated recovery phrase
-  Future<RegisterResult> register({
-    required String password,
-  }) async {
+  Future<RegisterResult> register({required String password}) async {
     List<String> recoveryWords = generateRecoveryPhraseWords();
     String recoveryPhrase = recoveryWords.join(' ');
 
@@ -125,7 +201,8 @@ class AuthService {
       wrappedKeyFromPassword: wrappedKeyFromPassword,
       wrappedKeyFromRecovery: wrappedKeyFromRecovery,
       checkValue: checkValue,
-      biometricEnabled: false
+      biometricEnabled: false,
+      pinEnabled: false,
     );
 
     await appDatabase.saveUser(user.toMap());
@@ -152,15 +229,35 @@ class AuthService {
   // Returns the vault key if the password was correct, otherwise null
   Future<String?> unlockWithPassword(User user, String password) async {
     String keyFromPassword = await deriveKey(password, user.saltForPassword);
-    return unwrapAndCheck(user.wrappedKeyFromPassword, keyFromPassword, user.checkValue);
+    String? vaultKey = unwrapAndCheck(
+      user.wrappedKeyFromPassword,
+      keyFromPassword,
+      user.checkValue,
+    );
+
+    if (vaultKey != null) {
+      // The master password is the ultimate fallback — a successful entry
+      // clears any Quick Access lockout and re-confirms this boot session.
+      resetQuickAccessAttempts();
+      await markUnlockedThisBoot();
+    }
+
+    return vaultKey;
   }
 
   // Tries to unlock the vault using the recovery phrase
   // Returns the vault key if the recovery phrase was correct, otherwise null
   Future<String?> unlockWithRecovery(User user, String recoveryPhrase) async {
     String normalizedPhrase = normalizeRecoveryPhrase(recoveryPhrase);
-    String keyFromRecovery = await deriveKey(normalizedPhrase, user.saltForRecovery);
-    return unwrapAndCheck(user.wrappedKeyFromRecovery, keyFromRecovery, user.checkValue);
+    String keyFromRecovery = await deriveKey(
+      normalizedPhrase,
+      user.saltForRecovery,
+    );
+    return unwrapAndCheck(
+      user.wrappedKeyFromRecovery,
+      keyFromRecovery,
+      user.checkValue,
+    );
   }
 
   // Trims extra spaces and makes everything lowercase
@@ -172,7 +269,11 @@ class AuthService {
 
   // Unwraps the vault key then checks it against the check value
   // A wrong password derives a wrong key, so decrypting either one fails
-  String? unwrapAndCheck(String wrappedKey, String wrappingKey, String checkValue) {
+  String? unwrapAndCheck(
+    String wrappedKey,
+    String wrappingKey,
+    String checkValue,
+  ) {
     try {
       String vaultKey = decryptWithKey(wrappedKey, wrappingKey);
       String decryptedCheck = decryptWithKey(checkValue, vaultKey);
@@ -225,8 +326,16 @@ class AuthService {
     await appDatabase.updateUser(user.toMap());
   }
 
+  // PIN Quick Access — independent on/off switch, same idea as biometrics
+  Future<void> setPinEnabled(bool enabled) async {
+    User? user = await getCurrentUser();
+    if (user == null) return;
+    user.pinEnabled = enabled;
+    await appDatabase.updateUser(user.toMap());
+  }
+
   // Password reset
-  
+
   // Re-wraps the vault key with a new password-derived key, then saves
   // the updated user row to SQLite. The vaultKey itself never changes.
   Future<void> resetPassword({
@@ -235,8 +344,14 @@ class AuthService {
     required String vaultKey,
   }) async {
     String newSaltForPassword = generateRandomBase64(16);
-    String newKeyFromPassword = await deriveKey(newPassword, newSaltForPassword);
-    String newWrappedKeyFromPassword = encryptWithKey(vaultKey, newKeyFromPassword);
+    String newKeyFromPassword = await deriveKey(
+      newPassword,
+      newSaltForPassword,
+    );
+    String newWrappedKeyFromPassword = encryptWithKey(
+      vaultKey,
+      newKeyFromPassword,
+    );
 
     user.saltForPassword = newSaltForPassword;
     user.wrappedKeyFromPassword = newWrappedKeyFromPassword;
@@ -245,6 +360,10 @@ class AuthService {
 
     // Store the vault key again (it hasn't changed, but good to be explicit)
     await storeVaultKey(vaultKey);
+
+    // Recovering via the phrase is just as strong as the master password —
+    // clear any Quick Access lockout and re-confirm this boot session.
+    resetQuickAccessAttempts();
+    await markUnlockedThisBoot();
   }
 }
-
